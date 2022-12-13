@@ -1686,21 +1686,24 @@ class Recognizer(AudioSource):
         assert isinstance(audio_data, AudioData), "Data must be audio data"
         import torch
         import whisper
+        import numpy as np
 
         if load_options or not hasattr(self, "whisper_model") or self.whisper_model.get(model) is None:
             self.whisper_model = getattr(self, "whisper_model", {})
             self.whisper_model[model] = whisper.load_model(model, **load_options or {})
 
-        with tempfile.NamedTemporaryFile(suffix=".wav") as f:
-            f.write(audio_data.get_wav_data())
-            f.flush()
-            result = self.whisper_model[model].transcribe(
-                f.name,
-                language=language,
-                task="translate" if translate else None,
-                fp16=torch.cuda.is_available(),
-                **transcribe_options
-            )
+   
+        audio = audio_data.get_wav_data(convert_rate=16000)
+        data = np.frombuffer(audio, np.int16).flatten().astype(np.float32) / 32768.0 
+        result = model.transcribe(data, language='en', temperature=0.0)
+
+        result = self.whisper_model[model].transcribe(
+            data,
+            language=language,
+            task="translate" if translate else None,
+            fp16=torch.cuda.is_available(),
+            **transcribe_options
+        )
 
         if show_dict:
             return result
